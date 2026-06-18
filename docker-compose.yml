@@ -1,0 +1,56 @@
+networks:
+  sister_network:
+    driver: bridge
+
+volumes:
+  pg_data:
+  broker_data:
+
+services:
+  storage:
+    image: postgres:16-alpine
+    container_name: uts_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: pass
+      POSTGRES_DB: db
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - sister_network
+
+  broker:
+    image: redis:7-alpine
+    container_name: uts_redis
+    restart: always
+    volumes:
+      - broker_data:/data
+    networks:
+      - sister_network
+
+  aggregator:
+    build: ./aggregator
+    container_name: uts_aggregator
+    depends_on:
+      - storage
+      - broker
+    environment:
+      DATABASE_URL: postgres://user:pass@storage:5432/db
+      REDIS_URL: redis://broker:6379
+    ports:
+      # Port HOST diubah ke 9000, Port CONTAINER tetap 8080
+      - "9000:8080"
+    networks:
+      - sister_network
+
+  publisher:
+    build: ./publisher
+    container_name: uts_publisher
+    depends_on:
+      - aggregator
+    environment:
+      TARGET_URL: http://aggregator:8080/publish
+    networks:
+      - sister_network
